@@ -4,9 +4,9 @@ import numpy as np
 from typing import List
 from drum import Drum
 
-CIRCLE_EDGE_DETECTION_THRESHOLD = 100 # higher value finds cleaner edges
+CIRCLE_EDGE_DETECTION_THRESHOLD = 110 # higher value finds cleaner edges
 CIRCLE_DETECTION_THRESHOLD = 200 # increase reduces false positives
-BLUR_FACTOR = 0.5
+BLUR_FACTOR = 0.2
 
 def init_drums(img_path: str) -> List[Drum]:
     """
