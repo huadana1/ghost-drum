@@ -1,6 +1,6 @@
 import cv2
 import os
-from main import init_drums
+from main import init_drums, detect_hit
 
 def test_init_drums():
     img_paths = img_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.png', '.jpg', '.jpeg'))]
@@ -19,6 +19,19 @@ def test_init_drums():
         success = cv2.imwrite(output_path, img)
         print(f"Saved to {output_path}: {success}")
 
+def test_detect_hit():
+    vid_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.mp4'))]
+
+    for vid_path in vid_paths:
+        # img = cv2.imread(img_path)
+        hits = detect_hit(vid_path)
+    
+        if hits:
+            print("Taps detected at:", hits)
+        else:
+            print("No taps detected.")
+
 if __name__ == '__main__':
-    test_init_drums()
+    # test_init_drums()
+    test_detect_hit()
     
