@@ -2,7 +2,7 @@ import numpy as np
 from scipy.signal import argrelmin
 import cv2
 import os
-from main import init_drums, detect_hit, SOUNDS, pad_sounds
+from main import init_drums, detect_hit, SOUNDS, pad_sounds, main
 from drum import Drum
 from pydub.playback import play
 
@@ -23,12 +23,12 @@ def test_init_drums():
         success = cv2.imwrite(output_path, img)
         print(f"Saved to {output_path}: {success}")
 
-def test_detect_hit():
+def test_main():
     vid_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.mp4'))]
 
     # for vid_path in vid_paths:
         # img = cv2.imread(img_path)
-    hits = detect_hit("Input/gesture_1.mp4")
+    hits = main("Input/gesture_6.mp4")
 
     if hits:
         print("Taps detected at:", hits)
@@ -52,7 +52,7 @@ def test_play_sound():
                 break
 
 if __name__ == '__main__':
-    test_init_drums()
-    # test_detect_hit()
+    # test_init_drums()
+    test_main()
     # test_play_sound()
     

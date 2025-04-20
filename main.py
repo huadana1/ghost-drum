@@ -4,7 +4,7 @@ import mediapipe as mp
 import numpy as np
 from typing import List
 from drum import Drum
-from scipy.signal import argrelmin
+from scipy.signal import argrelmax
 from pydub import AudioSegment
 from pydub.playback import play
 
@@ -13,7 +13,7 @@ CIRCLE_DETECTION_THRESHOLD = 60 # increase reduces false positives
 BLUR_FACTOR = 0.3
 VALID_MIN_THRESHOLD = 0.02
 SMOOTHING_WINDOW = 3
-MIN_DETECTION_WINDOW = 7
+MIN_DETECTION_WINDOW = 15
 
 CLAP_SOUND = AudioSegment.from_file("Sounds/clap_B_minor.wav")
 TOM_SOUND = AudioSegment.from_file("Sounds/big-tom_B_major.wav")
@@ -66,9 +66,6 @@ def init_drums(img_path: str) -> List[Drum]:
         maxRadius=max_radius
     )
 
-    # edges = cv2.Canny(blurred, threshold1=100, threshold2=200)
-    # success = cv2.imwrite('edges_output.jpg', edges)
-    # print(success)
 
     circles = np.uint16(np.around(circles))
 
@@ -79,7 +76,28 @@ def smooth_with_window(arr, window_size):
     """Smooth an array using a simple moving average."""
     return np.convolve(arr, np.ones(window_size)/window_size, mode='valid')
 
-def detect_hit(vid_path: str) -> list[tuple[int, int]]:
+def detect_hit(hand_landmarks, frame, prev_tip_z):
+
+    mp_hands = mp.solutions.hands
+    mp_draw = mp.solutions.drawing_utils    
+    mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+    h, w, _ = frame.shape
+
+    tip = hand_landmarks.landmark[8]
+    dip = hand_landmarks.landmark[7]
+
+    tip_z = tip.z
+    dip_z = dip.z
+    
+    if tip_z > dip_z and (prev_tip_z is None or tip_z - prev_tip_z >= 0):
+        tip_x_px = int(tip.x * w)
+        tip_y_px = int(tip.y * h)
+        cv2.circle(frame, (tip_x_px, tip_y_px), 10, (0, 0, 255), -1)
+        return tip_x_px, tip_y_px, tip_z
+    return None, None, tip_z
+
+
+def main(vid_path: str) -> list[tuple[int, int]]:
     """
     Determines if a hit was made with the index finger and returns all the coordinates
     of where finger taps (hits) occured.
@@ -92,16 +110,18 @@ def detect_hit(vid_path: str) -> list[tuple[int, int]]:
         (x, y) coordinate of where a hit occured.
     """
     mp_hands = mp.solutions.hands
-    mp_draw = mp.solutions.drawing_utils
     hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2,
                            min_detection_confidence=0.7, min_tracking_confidence=0.5)
 
     cap = cv2.VideoCapture(vid_path)
     hits = []
-    tapping = False
-    prev_tip_z = None
+    prev_tip_z_left = None
+    prev_tip_z_right = None
     seen_local_min_indices = set()
 
+    # cv2.imwrite(vid_path[:-4] + "_frame_1.jpg", frame) 
+    drums = init_drums(vid_path[:-4] + "_frame_1.jpg")
+    
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -109,47 +129,33 @@ def detect_hit(vid_path: str) -> list[tuple[int, int]]:
             break
 
         # read drums from first frame of image
-        cv2.imwrite(vid_path[:-4] + "_frame_1.jpg", frame) 
-        # drums = init_drums(vid_path[:-3] + "_frame_1.jpg")
         # hardcode drums for now because not perfect circles in videos
-        drums = [Drum(650, 300, 40, CRASH_SOUND), Drum(700, 300, 40, HI_HAT_SOUND), Drum(1450, 400, 200, TOM_SOUND)]
 
         frame = cv2.flip(frame, 1)
-        h, w, _ = frame.shape
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb)
 
         if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-                tip = hand_landmarks.landmark[8]
-                dip = hand_landmarks.landmark[7]
+            x1, y1, z1 = detect_hit(results.multi_hand_landmarks[0], frame, prev_tip_z_left)
+            if x1 != None:
+                hits.append((x1, y1, z1))
+            prev_tip_z_left = z1
 
-                tip_z = tip.z
-                dip_z = dip.z
-                
-                if tip_z > dip_z and (prev_tip_z is None or tip_z - prev_tip_z > 0.05):
-                    if not tapping:
-                        tip_x_px = int(tip.x * w)
-                        tip_y_px = int(tip.y * h)
-                        cv2.circle(frame, (tip_x_px, tip_y_px), 10, (0, 0, 255), -1)
-                        hits.append((tip_x_px, tip_y_px, tip.z))
-                        tapping = True
-                        
-
-                else:
-                    tapping = False
-
-                prev_tip_z = tip_z
+            if len(results.multi_hand_landmarks) >= 2:
+                x2, y2, z2 = detect_hit(results.multi_hand_landmarks[1], frame, prev_tip_z_right)
+                if x2 != None:
+                    hits.append((x2, y2, z2))
+                prev_tip_z_right = z2
+            
 
         # drawing the hit coords
         if hits:
             z_values = np.array([hit[2] for hit in hits])
             z_values = smooth_with_window(z_values, SMOOTHING_WINDOW)
-            local_minima_indices = argrelmin(z_values, order=MIN_DETECTION_WINDOW)[0]
+            local_maxima_indices = argrelmax(z_values, order=MIN_DETECTION_WINDOW)[0]
             # print("local min", local_minima_indices)
-            for index in local_minima_indices:
+            for index in local_maxima_indices:
                 x, y, z = hits[index]
 
                 # play sound for correct drum only if we have not already done so
@@ -158,12 +164,11 @@ def detect_hit(vid_path: str) -> list[tuple[int, int]]:
                     for drum in drums:
                         # only allow one sound per hit
                         if drum.hit_in_drum(x,y):
+                            cv2.circle(frame, (x, y), 100, (0, 255, 0), -1)            
                             drum.play()
                             break
                     seen_local_min_indices.add(index)
 
-                cv2.circle(frame, (x, y), 10, (0, 255, 0), -1)            
-                
 
         cv2.imshow("GESTURE RECOGNITION", frame)
         if cv2.waitKey(1) & 0xFF == 27:  # ESC key to exit
