@@ -79,7 +79,6 @@ def smooth_with_window(arr, window_size):
     """Smooth an array using a simple moving average."""
     return np.convolve(arr, np.ones(window_size)/window_size, mode='valid')
 
-def helper()
 def detect_hit(vid_path: str) -> list[tuple[int, int]]:
     """
     Determines if a hit was made with the index finger and returns all the coordinates
