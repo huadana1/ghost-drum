@@ -4,10 +4,14 @@ import mediapipe as mp
 import numpy as np
 from typing import List
 from drum import Drum
+from scipy.signal import argrelmin
 
 CIRCLE_EDGE_DETECTION_THRESHOLD = 110 # higher value finds cleaner edges
 CIRCLE_DETECTION_THRESHOLD = 200 # increase reduces false positives
 BLUR_FACTOR = 0.2
+VALID_MIN_THRESHOLD = 0.02
+SMOOTHING_WINDOW = 3
+MIN_DETECTION_WINDOW = 7
 
 def init_drums(img_path: str) -> List[Drum]:
     """
@@ -49,6 +53,9 @@ def init_drums(img_path: str) -> List[Drum]:
     circles = np.uint16(np.around(circles))
     return [Drum(x, y, radius) for x, y, radius in circles[0]]
 
+def smooth_with_window(arr, window_size):
+    """Smooth an array using a simple moving average."""
+    return np.convolve(arr, np.ones(window_size)/window_size, mode='valid')
 
 def detect_hit(vid_path: str) -> list[tuple[int, int]]:
     """
@@ -70,7 +77,7 @@ def detect_hit(vid_path: str) -> list[tuple[int, int]]:
     cap = cv2.VideoCapture(vid_path)
     hits = []
     tapping = False
-    prev_tip_y = None
+    prev_tip_z = None
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -89,24 +96,31 @@ def detect_hit(vid_path: str) -> list[tuple[int, int]]:
                 tip = hand_landmarks.landmark[8]
                 dip = hand_landmarks.landmark[7]
 
-                tip_y = tip.y
-                dip_y = dip.y
-
-                if tip_y > dip_y and (prev_tip_y is None or tip_y - prev_tip_y > 0.02):
+                tip_z = tip.z
+                dip_z = dip.z
+                
+                if tip_z > dip_z and (prev_tip_z is None or tip_z - prev_tip_z > 0.05):
                     if not tapping:
                         tip_x_px = int(tip.x * w)
                         tip_y_px = int(tip.y * h)
-                        hits.append((tip_x_px, tip_y_px))
+                        cv2.circle(frame, (tip_x_px, tip_y_px), 10, (0, 0, 255), -1)
+                        hits.append((tip_x_px, tip_y_px, tip.z))
                         tapping = True
+                        
 
                 else:
                     tapping = False
 
-                prev_tip_y = tip_y
+                prev_tip_z = tip_z
 
         # drawing the hit coords
-        for x, y in hits:
-            cv2.circle(frame, (x, y), 10, (0, 0, 255), -1)
+        if hits:
+            z_values = np.array([hit[2] for hit in hits])
+            z_values = smooth_with_window(z_values, SMOOTHING_WINDOW)
+            local_minima_indices = argrelmin(z_values, order=MIN_DETECTION_WINDOW)[0]
+            for index in local_minima_indices:
+                x, y, z = hits[index]
+                cv2.circle(frame, (x, y), 10, (0, 255, 0), -1)
 
         cv2.imshow("GESTURE RECOGNITION", frame)
         if cv2.waitKey(1) & 0xFF == 27:  # ESC key to exit
