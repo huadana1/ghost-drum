@@ -8,9 +8,9 @@ from scipy.signal import argrelmin
 from pydub import AudioSegment
 from pydub.playback import play
 
-CIRCLE_EDGE_DETECTION_THRESHOLD = 110 # higher value finds cleaner edges
-CIRCLE_DETECTION_THRESHOLD = 200 # increase reduces false positives
-BLUR_FACTOR = 0.2
+CIRCLE_EDGE_DETECTION_THRESHOLD = 60 # higher value finds cleaner edges
+CIRCLE_DETECTION_THRESHOLD = 60 # increase reduces false positives
+BLUR_FACTOR = 0.3
 VALID_MIN_THRESHOLD = 0.02
 SMOOTHING_WINDOW = 3
 MIN_DETECTION_WINDOW = 7
@@ -53,7 +53,7 @@ def init_drums(img_path: str) -> List[Drum]:
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    blurred = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 2)
+    blurred = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 5)
 
     circles = cv2.HoughCircles(
         blurred, 
@@ -79,6 +79,7 @@ def smooth_with_window(arr, window_size):
     """Smooth an array using a simple moving average."""
     return np.convolve(arr, np.ones(window_size)/window_size, mode='valid')
 
+def helper()
 def detect_hit(vid_path: str) -> list[tuple[int, int]]:
     """
     Determines if a hit was made with the index finger and returns all the coordinates

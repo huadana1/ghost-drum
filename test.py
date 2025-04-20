@@ -52,7 +52,7 @@ def test_play_sound():
                 break
 
 if __name__ == '__main__':
-    # test_init_drums()
-    test_detect_hit()
+    test_init_drums()
+    # test_detect_hit()
     # test_play_sound()
     
