@@ -5,6 +5,8 @@ import numpy as np
 from typing import List
 from drum import Drum
 from scipy.signal import argrelmin
+from pydub import AudioSegment
+from pydub.playback import play
 
 CIRCLE_EDGE_DETECTION_THRESHOLD = 110 # higher value finds cleaner edges
 CIRCLE_DETECTION_THRESHOLD = 200 # increase reduces false positives
@@ -12,6 +14,24 @@ BLUR_FACTOR = 0.2
 VALID_MIN_THRESHOLD = 0.02
 SMOOTHING_WINDOW = 3
 MIN_DETECTION_WINDOW = 7
+
+CLAP_SOUND = AudioSegment.from_file("Sounds/clap_B_minor.wav")
+TOM_SOUND = AudioSegment.from_file("Sounds/big-tom_B_major.wav")
+SNARE_SOUND = AudioSegment.from_file("Sounds/clean-snare_C_minor.wav")
+CRASH_SOUND = AudioSegment.from_file("Sounds/crash_F_minor.wav")
+HI_HAT_SOUND = AudioSegment.from_file("Sounds/hi-hat_B_minor.wav")
+
+SOUNDS = [CRASH_SOUND, SNARE_SOUND, HI_HAT_SOUND, CLAP_SOUND, TOM_SOUND]
+MIN_SOUND_DURATION_MS = 1000
+
+def pad_sounds():
+    """Modifies SOUNDS in place to last for MIN_SOUND_DURATION_MS"""
+    for i, sound in enumerate(SOUNDS):
+        if len(sound) < MIN_SOUND_DURATION_MS:
+            pad_duration = MIN_SOUND_DURATION_MS - len(sound)
+            sound += AudioSegment.silent(duration=pad_duration)
+            SOUNDS[i] = sound
+pad_sounds()
 
 def init_drums(img_path: str) -> List[Drum]:
     """
@@ -23,7 +43,7 @@ def init_drums(img_path: str) -> List[Drum]:
     Returns:
         drums (List[Drum]): A list of Drum objects, each with attributes 
         (x, y, radius) corresponding to a detected circle. 
-        The 'sound' attribute is initialized to None.
+        The 'sound' attribute is initialized to the built-in sounds in the order clap, tom, snare, crash, hi-hat.
     """
     img = cv2.imread(img_path)
     height, width = img.shape[:2]
@@ -51,7 +71,9 @@ def init_drums(img_path: str) -> List[Drum]:
     # print(success)
 
     circles = np.uint16(np.around(circles))
-    return [Drum(x, y, radius) for x, y, radius in circles[0]]
+
+    # TODO: currently looping through the sounds, but we should use set_sound for custom user input sounds at some point once we have an interface? -dana
+    return [Drum(x, y, radius, SOUNDS[idx%len(SOUNDS)]) for idx, (x, y, radius) in enumerate(circles[0])]
 
 def smooth_with_window(arr, window_size):
     """Smooth an array using a simple moving average."""
@@ -78,11 +100,19 @@ def detect_hit(vid_path: str) -> list[tuple[int, int]]:
     hits = []
     tapping = False
     prev_tip_z = None
+    seen_local_min_indices = set()
 
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
+            print("Error: Could not read the first frame")
             break
+
+        # read drums from first frame of image
+        cv2.imwrite(vid_path[:-4] + "_frame_1.jpg", frame) 
+        # drums = init_drums(vid_path[:-3] + "_frame_1.jpg")
+        # hardcode drums for now because not perfect circles in videos
+        drums = [Drum(650, 300, 40, CRASH_SOUND), Drum(700, 300, 40, HI_HAT_SOUND), Drum(1450, 400, 200, TOM_SOUND)]
 
         frame = cv2.flip(frame, 1)
         h, w, _ = frame.shape
@@ -118,9 +148,22 @@ def detect_hit(vid_path: str) -> list[tuple[int, int]]:
             z_values = np.array([hit[2] for hit in hits])
             z_values = smooth_with_window(z_values, SMOOTHING_WINDOW)
             local_minima_indices = argrelmin(z_values, order=MIN_DETECTION_WINDOW)[0]
+            # print("local min", local_minima_indices)
             for index in local_minima_indices:
                 x, y, z = hits[index]
-                cv2.circle(frame, (x, y), 10, (0, 255, 0), -1)
+
+                # play sound for correct drum only if we have not already done so
+                #  Not optimized :(
+                if (index not in seen_local_min_indices):
+                    for drum in drums:
+                        # only allow one sound per hit
+                        if drum.hit_in_drum(x,y):
+                            drum.play()
+                            break
+                    seen_local_min_indices.add(index)
+
+                cv2.circle(frame, (x, y), 10, (0, 255, 0), -1)            
+                
 
         cv2.imshow("GESTURE RECOGNITION", frame)
         if cv2.waitKey(1) & 0xFF == 27:  # ESC key to exit

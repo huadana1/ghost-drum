@@ -1,6 +1,10 @@
+import numpy as np
+from scipy.signal import argrelmin
 import cv2
 import os
-from main import init_drums, detect_hit
+from main import init_drums, detect_hit, SOUNDS, pad_sounds
+from drum import Drum
+from pydub.playback import play
 
 def test_init_drums():
     img_paths = img_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.png', '.jpg', '.jpeg'))]
@@ -31,7 +35,24 @@ def test_detect_hit():
         else:
             print("No taps detected.")
 
+def test_play_sound():
+    # for sound in SOUNDS:
+    #     play(sound)
+
+    drums = [Drum(650, 300, 40, SOUNDS[0]), Drum(700, 300, 40, SOUNDS[0]), Drum(1450, 400, 200, SOUNDS[0])]
+
+    hits = [(678, 243, 0.08209886401891708), (689, 251, 0.07918279618024826), (696, 257, 0.09394631534814835), (702, 266, 0.08539596199989319), (709, 271, 0.12486223876476288)]
+
+    for hit in hits:
+        x, y, z = hit
+
+        for drum in drums:
+            if drum.hit_in_drum(x,y):
+                # only allow one sound per hit
+                break
+
 if __name__ == '__main__':
     # test_init_drums()
     test_detect_hit()
+    # test_play_sound()
     
