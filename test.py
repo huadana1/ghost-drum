@@ -26,14 +26,14 @@ def test_init_drums():
 def test_detect_hit():
     vid_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.mp4'))]
 
-    for vid_path in vid_paths:
+    # for vid_path in vid_paths:
         # img = cv2.imread(img_path)
-        hits = detect_hit(vid_path)
-    
-        if hits:
-            print("Taps detected at:", hits)
-        else:
-            print("No taps detected.")
+    hits = detect_hit("Input/gesture_1.mp4")
+
+    if hits:
+        print("Taps detected at:", hits)
+    else:
+        print("No taps detected.")
 
 def test_play_sound():
     # for sound in SOUNDS:
