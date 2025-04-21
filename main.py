@@ -114,10 +114,16 @@ def main(vid_path: str) -> list[tuple[int, int]]:
                            min_detection_confidence=0.7, min_tracking_confidence=0.5)
 
     cap = cv2.VideoCapture(vid_path)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID'
+    out = cv2.VideoWriter(f'{vid_path}_output.mp4', fourcc, fps, (width, height))
     hits = []
     prev_tip_z_left = None
     prev_tip_z_right = None
     seen_local_min_indices = set()
+
 
     # cv2.imwrite(vid_path[:-4] + "_frame_1.jpg", frame) 
     drums = init_drums(vid_path[:-4] + "_frame_1.jpg")
@@ -130,7 +136,6 @@ def main(vid_path: str) -> list[tuple[int, int]]:
 
         # read drums from first frame of image
         # hardcode drums for now because not perfect circles in videos
-
         frame = cv2.flip(frame, 1)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb)
@@ -153,11 +158,11 @@ def main(vid_path: str) -> list[tuple[int, int]]:
         if hits:
             z_values = np.array([hit[2] for hit in hits])
             z_values = smooth_with_window(z_values, SMOOTHING_WINDOW)
+            # take max bc want to get the farthest point from camera (closer to camera is more neg)
             local_maxima_indices = argrelmax(z_values, order=MIN_DETECTION_WINDOW)[0]
             # print("local min", local_minima_indices)
             for index in local_maxima_indices:
                 x, y, z = hits[index]
-
                 # play sound for correct drum only if we have not already done so
                 #  Not optimized :(
                 if (index not in seen_local_min_indices):
@@ -171,10 +176,12 @@ def main(vid_path: str) -> list[tuple[int, int]]:
 
 
         cv2.imshow("GESTURE RECOGNITION", frame)
+        out.write(frame)
         if cv2.waitKey(1) & 0xFF == 27:  # ESC key to exit
             break
 
     cap.release()
+    out.release()
     cv2.destroyAllWindows()
     return hits
 
