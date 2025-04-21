@@ -6,7 +6,8 @@ from typing import List
 from drum import Drum
 from scipy.signal import argrelmax
 from pydub import AudioSegment
-from pydub.playback import play
+from pydub.playback import play, _play_with_simpleaudio
+import time
 
 CIRCLE_EDGE_DETECTION_THRESHOLD = 60 # higher value finds cleaner edges
 CIRCLE_DETECTION_THRESHOLD = 60 # increase reduces false positives
@@ -24,14 +25,15 @@ HI_HAT_SOUND = AudioSegment.from_file("Sounds/hi-hat_B_minor.wav")
 SOUNDS = [CRASH_SOUND, SNARE_SOUND, HI_HAT_SOUND, CLAP_SOUND, TOM_SOUND]
 MIN_SOUND_DURATION_MS = 1000
 
-def pad_sounds():
-    """Modifies SOUNDS in place to last for MIN_SOUND_DURATION_MS"""
-    for i, sound in enumerate(SOUNDS):
-        if len(sound) < MIN_SOUND_DURATION_MS:
-            pad_duration = MIN_SOUND_DURATION_MS - len(sound)
-            sound += AudioSegment.silent(duration=pad_duration)
-            SOUNDS[i] = sound
-pad_sounds()
+# Timeline to track full audio output (e.g., 10 seconds)
+# Using to produce the audio soundtrack
+audio_timeline_duration = 9000  # milliseconds
+audio_output_timeline = AudioSegment.silent(duration=audio_timeline_duration)
+
+def play_and_record(sound, current_time_ms):
+    global audio_output_timeline
+    audio_output_timeline = audio_output_timeline.overlay(sound, position=current_time_ms)
+    _play_with_simpleaudio(sound)
 
 def init_drums(img_path: str) -> List[Drum]:
     """
@@ -96,7 +98,6 @@ def detect_hit(hand_landmarks, frame, prev_tip_z):
         return tip_x_px, tip_y_px, tip_z
     return None, None, tip_z
 
-
 def main(vid_path: str) -> list[tuple[int, int]]:
     """
     Determines if a hit was made with the index finger and returns all the coordinates
@@ -118,7 +119,7 @@ def main(vid_path: str) -> list[tuple[int, int]]:
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID'
-    out = cv2.VideoWriter(f'{vid_path}_output.mp4', fourcc, fps, (width, height))
+    out = cv2.VideoWriter(f'Output/{vid_path[:-4]}_video_output.mp4', fourcc, fps, (width, height))
     hits = []
     prev_tip_z_left = None
     prev_tip_z_right = None
@@ -128,6 +129,7 @@ def main(vid_path: str) -> list[tuple[int, int]]:
     # cv2.imwrite(vid_path[:-4] + "_frame_1.jpg", frame) 
     drums = init_drums(vid_path[:-4] + "_frame_1.jpg")
     
+    frame_idx = 0
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -168,12 +170,13 @@ def main(vid_path: str) -> list[tuple[int, int]]:
                 if (index not in seen_local_min_indices):
                     for drum in drums:
                         # only allow one sound per hit
-                        if drum.hit_in_drum(x,y):
-                            cv2.circle(frame, (x, y), 100, (0, 255, 0), -1)            
-                            drum.play()
+                        if drum.hit_in_drum(x,y): 
+                            elapsed = int((frame_idx / fps) * 1000)   
+                            play_and_record(drum.get_drum_sound(), elapsed)
+                            cv2.circle(frame, (x, y), 100, (0, 255, 0), -1)   
                             break
                     seen_local_min_indices.add(index)
-
+        frame_idx += 1
 
         cv2.imshow("GESTURE RECOGNITION", frame)
         out.write(frame)
@@ -183,5 +186,10 @@ def main(vid_path: str) -> list[tuple[int, int]]:
     cap.release()
     out.release()
     cv2.destroyAllWindows()
+
+    # run the following line in terminal to combine audio and vid
+    # ffmpeg -i gesture_6_video_output.mp4 -i gesture_6_audio_output.wav -c:v copy -map 0:v:0 -map 1:a:0 -shortest gesture_6_combined_output.mp4
+    audio_output_timeline.export(f'Output/{vid_path[:-4]}_audio_output.wav', format="wav")
+
     return hits
 

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.signal import argrelmin
 import cv2
 import os
-from main import init_drums, detect_hit, SOUNDS, pad_sounds, main
+from main import init_drums, detect_hit, SOUNDS, main
 from drum import Drum
 from pydub.playback import play
 
@@ -28,7 +28,7 @@ def test_main():
 
     # for vid_path in vid_paths:
         # img = cv2.imread(img_path)
-    hits = main("Input/gesture_6.mp4")
+    hits = main("Input/gesture_8.mp4")
 
     if hits:
         print("Taps detected at:", hits)
