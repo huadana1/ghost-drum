@@ -14,7 +14,7 @@ CIRCLE_DETECTION_THRESHOLD = 60 # increase reduces false positives
 BLUR_FACTOR = 0.3
 VALID_MIN_THRESHOLD = 0.02
 SMOOTHING_WINDOW = 3
-MIN_DETECTION_WINDOW = 15
+MAX_DETECTION_WINDOW = 15
 
 CLAP_SOUND = AudioSegment.from_file("Sounds/clap_B_minor.wav")
 TOM_SOUND = AudioSegment.from_file("Sounds/big-tom_B_major.wav")
@@ -161,7 +161,7 @@ def main(vid_path: str) -> list[tuple[int, int]]:
             z_values = np.array([hit[2] for hit in hits])
             z_values = smooth_with_window(z_values, SMOOTHING_WINDOW)
             # take max bc want to get the farthest point from camera (closer to camera is more neg)
-            local_maxima_indices = argrelmax(z_values, order=MIN_DETECTION_WINDOW)[0]
+            local_maxima_indices = argrelmax(z_values, order=MAX_DETECTION_WINDOW)[0]
             # print("local min", local_minima_indices)
             for index in local_maxima_indices:
                 x, y, z = hits[index]
