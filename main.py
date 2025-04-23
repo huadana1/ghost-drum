@@ -88,7 +88,7 @@ def detect_hit(hand_landmarks, frame, prev_tip_z):
 
     tip_z = tip.z
     dip_z = dip.z
-    
+    print(tip_z* 100)
     if tip_z > dip_z and (prev_tip_z is None or tip_z - prev_tip_z >= 0):
         tip_x_px = int(tip.x * w)
         tip_y_px = int(tip.y * h)
