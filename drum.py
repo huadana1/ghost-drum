@@ -25,10 +25,6 @@ class Drum:
         radius_squared = self.radius**2
 
         # <= to allow edges
-        if dist_between_hit_and_center_square <= radius_squared:
-            # print(f'hit {hit_x}, {hit_y} inside drum')
-            return True
-        else:
-            # print(f'hit {hit_x}, {hit_y} not inside drum')
-            return False
+        return dist_between_hit_and_center_square <= radius_squared
+
     

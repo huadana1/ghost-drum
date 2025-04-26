@@ -90,7 +90,6 @@ def detect_hit(hand_landmarks, frame, prev_tip_z):
 
     tip_z = tip.z
     dip_z = dip.z
-    print(tip_z* 100)
     if tip_z > dip_z and (prev_tip_z is None or tip_z - prev_tip_z >= 0):
         tip_x_px = int(tip.x * w)
         tip_y_px = int(tip.y * h)
@@ -162,7 +161,6 @@ def main(vid_path: str) -> list[tuple[int, int]]:
             z_values = smooth_with_window(z_values, SMOOTHING_WINDOW)
             # take max bc want to get the farthest point from camera (closer to camera is more neg)
             local_maxima_indices = argrelmax(z_values, order=MAX_DETECTION_WINDOW)[0]
-            # print("local min", local_minima_indices)
             for index in local_maxima_indices:
                 x, y, z = hits[index]
                 # play sound for correct drum only if we have not already done so

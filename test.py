@@ -28,12 +28,12 @@ def test_main():
 
     # for vid_path in vid_paths:
         # img = cv2.imread(img_path)
-    hits = main("Input/gesture_8.mp4")
+    hits = main("Input/gesture_6.mp4")
 
-    if hits:
-        print("Taps detected at:", hits)
-    else:
-        print("No taps detected.")
+    # if hits:
+    #     print("Taps detected at:", hits)
+    # else:
+    #     print("No taps detected.")
 
 def test_play_sound():
     # for sound in SOUNDS:
