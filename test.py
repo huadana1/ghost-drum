@@ -5,6 +5,7 @@ import os
 from main import init_drums, detect_hit, SOUNDS, main
 from drum import Drum
 from pydub.playback import play
+from live import live
 
 def test_init_drums():
     img_paths = img_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.png', '.jpg', '.jpeg'))]
@@ -28,7 +29,7 @@ def test_main():
 
     # for vid_path in vid_paths:
         # img = cv2.imread(img_path)
-    hits = main("Input/gesture_6.mp4")
+    hits = live()
 
     # if hits:
     #     print("Taps detected at:", hits)
