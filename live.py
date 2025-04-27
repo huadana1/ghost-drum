@@ -8,6 +8,7 @@ from scipy.signal import argrelmax
 from pydub import AudioSegment
 from pydub.playback import play, _play_with_simpleaudio
 import time
+from cvzone.HandTrackingModule import HandDetector
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
@@ -19,6 +20,8 @@ BLUR_FACTOR = 0.3
 VALID_MIN_THRESHOLD = 0.02
 SMOOTHING_WINDOW = 3
 MAX_DETECTION_WINDOW = 15
+HIT_DETECTION_THRESHOLD = 0.03
+HIT_WINDOW = 3
 
 CLAP_SOUND = AudioSegment.from_file("Sounds/clap_B_minor.wav")
 TOM_SOUND = AudioSegment.from_file("Sounds/big-tom_B_major.wav")
@@ -99,21 +102,23 @@ def process_drum_hit(drums, x1, y1, frame_idx, fps, frame):
             cv2.circle(frame, (x1, y1), 100, (0, 255, 0), -1)   
             break
 
-def detect_hit(hand_landmarks, frame, world_z, max_z):    
+def detect_hit(hand_landmarks, frame, max_hit_diff):    
     mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
     h, w, _ = frame.shape
 
     tip = hand_landmarks.landmark[8]
-    dip = hand_landmarks.landmark[7]
+    mcp = hand_landmarks.landmark[5]
 
     tip_z = tip.z
-    dip_z = dip.z
-    print('candidate', world_z)
-    print('diff', abs(world_z - max_z))
-    if tip_z > dip_z and abs(world_z - max_z) <= 0.03:
+    mcp_z = mcp.z
+
+    diff = tip_z - mcp_z
+    # if tip_z > mcp_z and abs(diff - max_hit_diff) <= HIT_DETECTION_THRESHOLD:
+    if tip_z > mcp_z:
         tip_x_px = int(tip.x * w)
         tip_y_px = int(tip.y * h)
         print('Hit detected 💥')
+        cv2.putText(frame, f'Tip: {tip_z} Mcp: {mcp_z}', (50, 100), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 2)
         cv2.circle(frame, (tip_x_px, tip_y_px), 10, (0, 0, 255), -1)
         return True, (tip_x_px, tip_y_px)
     return False, (None, None)
@@ -138,20 +143,33 @@ def live() -> list[tuple[int, int]]:
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID'
     out = cv2.VideoWriter(f'Output/test.mp4', fourcc, fps, (width, height))
 
-    hits = []
+    last_hit_frame_idx = 0
 
     frame_idx = 0
     drums = []
-    max_z = float('-inf')
+    max_hit_diff = float('-inf')
 
     print('Software started ✅\n')
 
     while cap.isOpened():
+
         ret, frame = cap.read()
 
         if not ret:
             print("Error: Could not read the first frame")
             break
+
+        # First, update max_z across all hands
+        if 10 <= frame_idx and frame_idx <= 100:
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    tip_z = hand_landmarks.landmark[8].z
+                    mcp_z = hand_landmarks.landmark[5].z
+
+                    diff = tip_z - mcp_z
+                    if diff > max_hit_diff:
+                        max_hit_diff = diff
+            
     
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb)
@@ -163,22 +181,21 @@ def live() -> list[tuple[int, int]]:
 
         draw_drums(drums, frame)
 
+    
         if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
 
-            # First, update max_z across all hands
-            for world_landmarks in results.multi_hand_world_landmarks:
-                fingertip_z = world_landmarks.landmark[8].z
-                if fingertip_z > max_z:
-                    max_z = fingertip_z
-                    print('max_z', max_z)
-
             # Then, process each detected hand
-            for hand_landmarks, world_landmarks in zip(results.multi_hand_landmarks, results.multi_hand_world_landmarks):
-                fingertip_z = world_landmarks.landmark[8].z
-                hit, (x, y) = detect_hit(hand_landmarks, frame, fingertip_z, max_z)
-                if hit: process_drum_hit(drums, x, y, frame_idx, fps, frame)
+            for hand_landmarks in zip(results.multi_hand_landmarks):
+
+                hit, (x, y) = detect_hit(hand_landmarks, frame, max_hit_diff)
+                if hit and frame_idx - last_hit_frame_idx >= HIT_WINDOW: 
+                    last_hit_frame_idx = frame_idx
+                    process_drum_hit(drums, x, y, frame_idx, fps, frame)
 
             
+        if frame_idx < 100:
+            cv2.putText(frame, 'Place index finger on table', (50, 100), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 2)
+
         frame_idx += 1
 
         cv2.imshow("GESTURE RECOGNITION", frame)
@@ -194,5 +211,4 @@ def live() -> list[tuple[int, int]]:
     # ffmpeg -i gesture_6_video_output.mp4 -i gesture_6_audio_output.wav -c:v copy -map 0:v:0 -map 1:a:0 -shortest gesture_6_combined_output.mp4
     # audio_output_timeline.export(f'Output/{vid_path[:-4]}_audio_output.wav', format="wav")
 
-    return hits
 
