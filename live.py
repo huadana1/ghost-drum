@@ -8,7 +8,13 @@ from scipy.signal import argrelmax
 from pydub import AudioSegment
 from pydub.playback import play, _play_with_simpleaudio
 import time
-from cvzone.HandTrackingModule import HandDetector
+import threading
+import sys
+import os
+from vosk import Model, KaldiRecognizer
+import pyaudio
+import queue
+import json
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
@@ -22,12 +28,21 @@ SMOOTHING_WINDOW = 3
 MAX_DETECTION_WINDOW = 15
 HIT_DETECTION_THRESHOLD = 0.03
 HIT_WINDOW = 3
+DISTANCE_BETWEEN_CIRCLES = 100
 
 CLAP_SOUND = AudioSegment.from_file("Sounds/clap_B_minor.wav")
 TOM_SOUND = AudioSegment.from_file("Sounds/big-tom_B_major.wav")
 SNARE_SOUND = AudioSegment.from_file("Sounds/clean-snare_C_minor.wav")
 CRASH_SOUND = AudioSegment.from_file("Sounds/crash_F_minor.wav")
 HI_HAT_SOUND = AudioSegment.from_file("Sounds/hi-hat_B_minor.wav")
+
+SOUND_LIBRARY = {
+    "clap": CLAP_SOUND,
+    "tom": TOM_SOUND,
+    "snare": SNARE_SOUND,
+    "crash": CRASH_SOUND,
+    "hi hat": HI_HAT_SOUND
+}
 
 SOUNDS = [CRASH_SOUND, SNARE_SOUND, HI_HAT_SOUND, CLAP_SOUND, TOM_SOUND]
 MIN_SOUND_DURATION_MS = 1000
@@ -72,17 +87,17 @@ def init_drums(frame: np.ndarray) -> List[Drum]:
         blurred, 
         cv2.HOUGH_GRADIENT, 
         dp=1.2, 
-        minDist=30, 
+        minDist=DISTANCE_BETWEEN_CIRCLES, 
         param1=CIRCLE_EDGE_DETECTION_THRESHOLD, 
         param2=CIRCLE_DETECTION_THRESHOLD, 
         minRadius=10, 
         maxRadius=max_radius
     )
 
-
     circles = np.uint16(np.around(circles))
 
     # TODO: currently looping through the sounds, but we should use set_sound for custom user input sounds at some point once we have an interface? -dana
+    
     return [Drum(x, y, radius, SOUNDS[idx%len(SOUNDS)]) for idx, (x, y, radius) in enumerate(circles[0])]
 
 def draw_drums(drums, frame):
@@ -122,6 +137,100 @@ def detect_hit(hand_landmarks, frame, max_hit_diff):
         cv2.circle(frame, (tip_x_px, tip_y_px), 10, (0, 0, 255), -1)
         return True, (tip_x_px, tip_y_px)
     return False, (None, None)
+
+def record_audio(sounds, num_drums):
+    # model = Model("vosk-model-small-en-us-0.15")
+    model = Model("vosk-model-en-us-0.22-lgraph")
+
+    recognizer = KaldiRecognizer(model, 16000)
+
+    # Start audio stream
+    mic = pyaudio.PyAudio()
+    stream = mic.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=4000)
+    stream.start_stream()
+    print("Listening...")
+
+    while len(sounds) < num_drums:
+        data = stream.read(4000, exception_on_overflow=False)
+        if recognizer.AcceptWaveform(data):
+            result = json.loads(recognizer.Result())
+
+            for sound_name in SOUND_LIBRARY:
+                if sound_name in result['text']:
+                    sounds.append(sound_name)        
+                    print(f'Sound {sound_name} successfully added!') 
+        else:
+            partial_result = recognizer.PartialResult()
+            # print(partial_result)
+
+    print("Voice recognition ended")
+
+def assign_drum_sound() -> list[tuple[int, int]]:
+
+
+    cap = cv2.VideoCapture(1)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID'
+    out = cv2.VideoWriter(f'Output/test.mp4', fourcc, fps, (width, height))
+    frame_idx = 0
+    drums_detected = []
+    sounds = []
+
+    while cap.isOpened():
+
+        ret, frame = cap.read()
+
+        if not ret:
+            print("Error: Could not read the first frame")
+            break
+
+         # read drums from first frame of image
+        if frame_idx == 0:
+            drums = init_drums(frame)
+            print(f'Initialized {len(drums)} 🥁\n')
+            
+            audio_thread = threading.Thread(
+                target=lambda: record_audio(sounds, len(drums))
+            )
+            audio_thread.start()
+
+        draw_drums(drums, frame)
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands.process(rgb)
+
+        if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
+
+            # Then, process each detected hand
+            for hand_landmarks in results.multi_hand_landmarks:
+                mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                x, y = hand_landmarks.landmark[8].x,  hand_landmarks.landmark[8].y
+                for drum in drums:
+                    if drum.hit_in_drum(x * width, y * height): 
+                        if drum not in drums_detected:
+                            drums_detected.append(drum)
+
+        frame_idx += 1
+
+        if not audio_thread.is_alive():
+            for drum, sound_name in zip(drums_detected, sounds):
+                drum.set_drum_sound(sound_name, SOUND_LIBRARY[sound_name])
+                cv2.putText(frame, drum.sound_name, (drum.x, drum.y), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 2)
+
+        cv2.imshow("GESTURE RECOGNITION", frame)
+        out.write(frame)
+        if cv2.waitKey(1) & 0xFF == 27:  # ESC key to exit
+            break
+        
+    cap.release()
+    out.release()
+    audio_thread.join()
+
+    
+
+    cv2.destroyAllWindows()
 
 def live() -> list[tuple[int, int]]:
     """
@@ -185,7 +294,7 @@ def live() -> list[tuple[int, int]]:
         if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
 
             # Then, process each detected hand
-            for hand_landmarks in zip(results.multi_hand_landmarks):
+            for hand_landmarks in results.multi_hand_landmarks:
 
                 hit, (x, y) = detect_hit(hand_landmarks, frame, max_hit_diff)
                 if hit and frame_idx - last_hit_frame_idx >= HIT_WINDOW: 

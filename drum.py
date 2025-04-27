@@ -4,13 +4,15 @@ import time
 class Drum:
     """A drum at location (x, y) with radius `radius` and sound `sound`"""
     
-    def __init__(self, x: float, y: float, radius: float, sound=None):
+    def __init__(self, x: float, y: float, radius: float, sound_name ='', sound=None):
         self.x = x
         self.y = y
         self.radius = radius
+        self.sound_name = sound_name
         self.sound = sound
     
-    def set_drum_sound(self, sound: str):
+    def set_drum_sound(self, sound_name: str, sound):
+        self.sound_name = sound_name
         self.sound = sound
 
     def get_drum_sound(self):
