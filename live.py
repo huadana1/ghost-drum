@@ -15,6 +15,7 @@ from vosk import Model, KaldiRecognizer
 import pyaudio
 import queue
 import json
+import pyttsx3
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
@@ -26,22 +27,24 @@ BLUR_FACTOR = 0.3
 VALID_MIN_THRESHOLD = 0.02
 SMOOTHING_WINDOW = 3
 MAX_DETECTION_WINDOW = 15
-HIT_DETECTION_THRESHOLD = 0.03
-HIT_WINDOW = 3
+HIT_DETECTION_THRESHOLD = 0.007
+HIT_WINDOW = 5
 DISTANCE_BETWEEN_CIRCLES = 100
+MOVEMENT_THRESHOLD = 0.01
 
 CLAP_SOUND = AudioSegment.from_file("Sounds/clap_B_minor.wav")
 TOM_SOUND = AudioSegment.from_file("Sounds/big-tom_B_major.wav")
 SNARE_SOUND = AudioSegment.from_file("Sounds/clean-snare_C_minor.wav")
 CRASH_SOUND = AudioSegment.from_file("Sounds/crash_F_minor.wav")
 HI_HAT_SOUND = AudioSegment.from_file("Sounds/hi-hat_B_minor.wav")
-
+DUCK_SOUND = AudioSegment.from_file("Sounds/duck.wav")
 SOUND_LIBRARY = {
     "clap": CLAP_SOUND,
     "tom": TOM_SOUND,
     "snare": SNARE_SOUND,
     "crash": CRASH_SOUND,
-    "hi hat": HI_HAT_SOUND
+    "hi hat": HI_HAT_SOUND,
+    "duck": DUCK_SOUND
 }
 
 SOUNDS = [CRASH_SOUND, SNARE_SOUND, HI_HAT_SOUND, CLAP_SOUND, TOM_SOUND]
@@ -117,7 +120,7 @@ def process_drum_hit(drums, x1, y1, frame_idx, fps, frame):
             cv2.circle(frame, (x1, y1), 100, (0, 255, 0), -1)   
             break
 
-def detect_hit(hand_landmarks, frame, max_hit_diff):    
+def detect_hit(hand_landmarks, frame, max_hit_diff, prev_tip_z):    
     mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
     h, w, _ = frame.shape
 
@@ -129,14 +132,29 @@ def detect_hit(hand_landmarks, frame, max_hit_diff):
 
     diff = tip_z - mcp_z
     # if tip_z > mcp_z and abs(diff - max_hit_diff) <= HIT_DETECTION_THRESHOLD:
-    if tip_z > mcp_z:
+    if tip_z > mcp_z and diff >= HIT_DETECTION_THRESHOLD and tip_z - prev_tip_z > MOVEMENT_THRESHOLD:
         tip_x_px = int(tip.x * w)
         tip_y_px = int(tip.y * h)
         print('Hit detected 💥')
         cv2.putText(frame, f'Tip: {tip_z} Mcp: {mcp_z}', (50, 100), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 2)
         cv2.circle(frame, (tip_x_px, tip_y_px), 10, (0, 0, 255), -1)
-        return True, (tip_x_px, tip_y_px)
-    return False, (None, None)
+        return True, (tip_x_px, tip_y_px, tip_z)
+    return False, (None, None, tip_z)
+
+def tts_loop(engine, q, stream):
+    engine.startLoop(False)
+    while True:
+        phrase = q.get()
+        if phrase is None:
+            break
+        stream.stop_stream()
+        engine.say(phrase)
+        while engine.isBusy():
+            engine.iterate()
+            time.sleep(0.1)
+        stream.start_stream()
+    engine.endLoop()
+
 
 def record_audio(sounds, num_drums):
     # model = Model("vosk-model-small-en-us-0.15")
@@ -148,6 +166,10 @@ def record_audio(sounds, num_drums):
     mic = pyaudio.PyAudio()
     stream = mic.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=4000)
     stream.start_stream()
+    engine = pyttsx3.init()
+    q = queue.Queue()
+    t = threading.Thread(target=tts_loop, args=(engine, q, stream))
+    t.start()
     print("Listening...")
 
     while len(sounds) < num_drums:
@@ -157,12 +179,13 @@ def record_audio(sounds, num_drums):
 
             for sound_name in SOUND_LIBRARY:
                 if sound_name in result['text']:
-                    sounds.append(sound_name)        
-                    print(f'Sound {sound_name} successfully added!') 
+                    sounds.append(sound_name)   
+                    q.put(f"Sound {sound_name} successfully added!")
+                    print(f"Sound {sound_name} successfully added!")
+
         else:
             partial_result = recognizer.PartialResult()
             # print(partial_result)
-
     print("Voice recognition ended")
 
 def assign_drum_sound() -> list[tuple[int, int]]:
@@ -232,6 +255,26 @@ def assign_drum_sound() -> list[tuple[int, int]]:
 
     cv2.destroyAllWindows()
 
+    
+def set_drum_sound(results, frame, drums, width, height, audio_thread, sounds, drums_detected):
+
+    if audio_thread.is_alive():
+        if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
+            # Then, process each detected hand
+            for hand_landmarks in results.multi_hand_landmarks:
+                mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                x, y = hand_landmarks.landmark[8].x,  hand_landmarks.landmark[8].y
+                for drum in drums:
+                    if drum.hit_in_drum(x * width, y * height): 
+                        if drum not in drums_detected:
+                            drums_detected.append(drum)
+
+    else:
+        for drum, sound_name in zip(drums_detected, sounds):
+            drum.set_drum_sound(sound_name, SOUND_LIBRARY[sound_name])
+            cv2.putText(frame, drum.sound_name, (drum.x, drum.y), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 2)
+
+
 def live() -> list[tuple[int, int]]:
     """
     Determines if a hit was made with the index finger and returns all the coordinates
@@ -256,7 +299,11 @@ def live() -> list[tuple[int, int]]:
 
     frame_idx = 0
     drums = []
+    assigned_drums = []
+    assigned_sounds = []
     max_hit_diff = float('-inf')
+    prev_tip_z = [float('-inf'), float('-inf')]
+
 
     print('Software started ✅\n')
 
@@ -288,22 +335,32 @@ def live() -> list[tuple[int, int]]:
             drums = init_drums(frame)
             print(f'Initialized {len(drums)} 🥁\n')
 
+            audio_thread = threading.Thread(
+                target=lambda: record_audio(assigned_sounds, len(drums))
+            )
+            audio_thread.start()
+
         draw_drums(drums, frame)
 
-    
-        if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
+        set_drum_sound(results, frame, drums, width, height, audio_thread, assigned_sounds, assigned_drums)
+        
+        ######################### HIT DETECTION #########################
+        if not audio_thread.is_alive() and results.multi_hand_landmarks and results.multi_hand_world_landmarks:
 
             # Then, process each detected hand
-            for hand_landmarks in results.multi_hand_landmarks:
-
-                hit, (x, y) = detect_hit(hand_landmarks, frame, max_hit_diff)
+            for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
+                hit, (x, y, z) = detect_hit(hand_landmarks, frame, max_hit_diff, prev_tip_z[i])
                 if hit and frame_idx - last_hit_frame_idx >= HIT_WINDOW: 
                     last_hit_frame_idx = frame_idx
                     process_drum_hit(drums, x, y, frame_idx, fps, frame)
 
+                prev_tip_z[i] = z
+                
+
+
             
-        if frame_idx < 100:
-            cv2.putText(frame, 'Place index finger on table', (50, 100), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 2)
+        # if frame_idx < 100:
+        #     cv2.putText(frame, 'Place index finger on table', (50, 100), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 2)
 
         frame_idx += 1
 
@@ -314,6 +371,7 @@ def live() -> list[tuple[int, int]]:
 
     cap.release()
     out.release()
+    audio_thread.join()
     cv2.destroyAllWindows()
 
     # run the following line in terminal to combine audio and vid

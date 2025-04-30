@@ -26,11 +26,12 @@ def test_init_drums():
         print(f"Saved to {output_path}: {success}")
 
 def test_main():
-    vid_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.mp4'))]
+    # vid_paths = [os.path.join('Input', filename) for filename in os.listdir('Input') if filename.endswith(('.mp4'))]
 
     # for vid_path in vid_paths:
         # img = cv2.imread(img_path)
-    hits = assign_drum_sound()
+    # hits = assign_drum_sound()
+    live()
 
     # if hits:
     #     print("Taps detected at:", hits)
