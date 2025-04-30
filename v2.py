@@ -99,8 +99,6 @@ def init_drums(frame: np.ndarray) -> List[Drum]:
 
     circles = np.uint16(np.around(circles))
 
-    # TODO: currently looping through the sounds, but we should use set_sound for custom user input sounds at some point once we have an interface? -dana
-    
     return [Drum(x, y, radius, SOUNDS[idx%len(SOUNDS)]) for idx, (x, y, radius) in enumerate(circles[0])]
 
 def draw_drums(drums, frame):
@@ -120,7 +118,7 @@ def process_drum_hit(drums, x1, y1, frame_idx, fps, frame):
             cv2.circle(frame, (x1, y1), 100, (0, 255, 0), -1)   
             break
 
-def detect_hit(hand_landmarks, frame, max_hit_diff, prev_tip_z):    
+def detect_hit(hand_landmarks, frame, prev_tip_z):    
     mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
     h, w, _ = frame.shape
 
@@ -185,12 +183,9 @@ def record_audio(sounds, num_drums):
 
         else:
             partial_result = recognizer.PartialResult()
-            # print(partial_result)
     print("Voice recognition ended")
 
 def assign_drum_sound() -> list[tuple[int, int]]:
-
-
     cap = cv2.VideoCapture(1)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -254,7 +249,6 @@ def assign_drum_sound() -> list[tuple[int, int]]:
     
 
     cv2.destroyAllWindows()
-
     
 def set_drum_sound(results, frame, drums, width, height, audio_thread, sounds, drums_detected):
 
@@ -273,7 +267,6 @@ def set_drum_sound(results, frame, drums, width, height, audio_thread, sounds, d
         for drum, sound_name in zip(drums_detected, sounds):
             drum.set_drum_sound(sound_name, SOUND_LIBRARY[sound_name])
             cv2.putText(frame, drum.sound_name, (drum.x, drum.y), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 2)
-
 
 def live() -> list[tuple[int, int]]:
     """
@@ -315,18 +308,6 @@ def live() -> list[tuple[int, int]]:
             print("Error: Could not read the first frame")
             break
 
-        # First, update max_z across all hands
-        if 10 <= frame_idx and frame_idx <= 100:
-            if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
-                    tip_z = hand_landmarks.landmark[8].z
-                    mcp_z = hand_landmarks.landmark[5].z
-
-                    diff = tip_z - mcp_z
-                    if diff > max_hit_diff:
-                        max_hit_diff = diff
-            
-    
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb)
 
@@ -341,7 +322,6 @@ def live() -> list[tuple[int, int]]:
             audio_thread.start()
 
         draw_drums(drums, frame)
-
         set_drum_sound(results, frame, drums, width, height, audio_thread, assigned_sounds, assigned_drums)
         
         ######################### HIT DETECTION #########################
@@ -349,19 +329,13 @@ def live() -> list[tuple[int, int]]:
 
             # Then, process each detected hand
             for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                hit, (x, y, z) = detect_hit(hand_landmarks, frame, max_hit_diff, prev_tip_z[i])
+                hit, (x, y, z) = detect_hit(hand_landmarks, frame, prev_tip_z[i])
                 if hit and frame_idx - last_hit_frame_idx >= HIT_WINDOW: 
                     last_hit_frame_idx = frame_idx
                     process_drum_hit(drums, x, y, frame_idx, fps, frame)
 
                 prev_tip_z[i] = z
                 
-
-
-            
-        # if frame_idx < 100:
-        #     cv2.putText(frame, 'Place index finger on table', (50, 100), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 2)
-
         frame_idx += 1
 
         cv2.imshow("GESTURE RECOGNITION", frame)
@@ -374,8 +348,5 @@ def live() -> list[tuple[int, int]]:
     audio_thread.join()
     cv2.destroyAllWindows()
 
-    # run the following line in terminal to combine audio and vid
-    # ffmpeg -i gesture_6_video_output.mp4 -i gesture_6_audio_output.wav -c:v copy -map 0:v:0 -map 1:a:0 -shortest gesture_6_combined_output.mp4
-    # audio_output_timeline.export(f'Output/{vid_path[:-4]}_audio_output.wav', format="wav")
-
+  
 
