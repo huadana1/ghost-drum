@@ -28,7 +28,7 @@ VALID_MIN_THRESHOLD = 0.02
 SMOOTHING_WINDOW = 3
 MAX_DETECTION_WINDOW = 15
 HIT_DETECTION_THRESHOLD = 0.007
-HIT_WINDOW = 5
+HIT_WINDOW = 3
 DISTANCE_BETWEEN_CIRCLES = 100
 MOVEMENT_THRESHOLD = 0.01
 
@@ -37,7 +37,7 @@ TOM_SOUND = AudioSegment.from_file("Sounds/big-tom_B_major.wav")
 SNARE_SOUND = AudioSegment.from_file("Sounds/clean-snare_C_minor.wav")
 CRASH_SOUND = AudioSegment.from_file("Sounds/crash_F_minor.wav")
 HI_HAT_SOUND = AudioSegment.from_file("Sounds/hi-hat_B_minor.wav")
-DUCK_SOUND = AudioSegment.from_file("Sounds/duck.wav")
+DUCK_SOUND = AudioSegment.from_file("Sounds/duck.mp3")
 SOUND_LIBRARY = {
     "clap": CLAP_SOUND,
     "tom": TOM_SOUND,
@@ -47,7 +47,7 @@ SOUND_LIBRARY = {
     "duck": DUCK_SOUND
 }
 
-SOUNDS = [CRASH_SOUND, SNARE_SOUND, HI_HAT_SOUND, CLAP_SOUND, TOM_SOUND]
+SOUNDS = [CRASH_SOUND, SNARE_SOUND, HI_HAT_SOUND, CLAP_SOUND, TOM_SOUND, DUCK_SOUND]
 MIN_SOUND_DURATION_MS = 1000
 
 # Timeline to track full audio output (e.g., 10 seconds)
