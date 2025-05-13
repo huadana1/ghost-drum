@@ -24,7 +24,7 @@ Ghost Drum is a multimodal interactive system that allows users to define virtua
 
 Ensure your machine has:
 
-- Python 3.9 (not 3.13!)
+- Python 3.11 (not 3.13!)
 - A webcam (can be a phone camera connected to laptop)
 - Working microphone
 - Paper circle cutouts (used as drum heads)
@@ -34,7 +34,7 @@ Ensure your machine has:
 
 1. Install necessary packages using pip install -r requirements.txt. If you want to use a virtual environment, run `source venv/bin/activate` to use our environment which has all the packages required.
 2. Position the webcam using a tripod so that it clearly captures the paper circles laid out as drumheads.
-3. Run `python v2.py` to start the system. This will
+3. Run `python3 test.py` to start the system. This will
     - Start your webcam
     - Detect circular drum heads and outline them
     - Prompt you to point at eah drum and say a sound name displayed on the interface (e.g., "cat")
