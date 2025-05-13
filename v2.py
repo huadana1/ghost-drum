@@ -16,6 +16,7 @@ import pyaudio
 import queue
 import json
 import pyttsx3
+import random
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
@@ -38,6 +39,15 @@ SNARE_SOUND = AudioSegment.from_file("Sounds/clean-snare_C_minor.wav")
 CRASH_SOUND = AudioSegment.from_file("Sounds/crash_F_minor.wav")
 HI_HAT_SOUND = AudioSegment.from_file("Sounds/hi-hat_B_minor.wav")
 DUCK_SOUND = AudioSegment.from_file("Sounds/duck.mp3")
+B = AudioSegment.from_file("Sounds/b.mp3")
+A = AudioSegment.from_file("Sounds/a.mp3")
+
+D = AudioSegment.from_file("Sounds/d.mp3")
+E = AudioSegment.from_file("Sounds/e.mp3")
+G = AudioSegment.from_file("Sounds/g.mp3")
+CAT_SOUND = AudioSegment.from_file("Sounds/cat.mp3")
+
+
 SOUND_LIBRARY = {
     "clap": CLAP_SOUND,
     "tom": TOM_SOUND,
@@ -47,7 +57,13 @@ SOUND_LIBRARY = {
 }
 
 CUSTOM_LIBRARY = {
-    "duck": DUCK_SOUND
+    "duck": DUCK_SOUND,
+    "cat": CAT_SOUND,
+    "a": A,
+    "b": B,
+    "e": E,
+    "g": G,
+    "d": D
 }
 
 SOUNDS = [CRASH_SOUND, SNARE_SOUND, HI_HAT_SOUND, CLAP_SOUND, TOM_SOUND, DUCK_SOUND]
@@ -182,9 +198,9 @@ def record_audio(sounds, num_drums):
         data = stream.read(4000, exception_on_overflow=False)
         if recognizer.AcceptWaveform(data):
             result = json.loads(recognizer.Result())
-
-            for sound_name in SOUND_LIBRARY:
-                if sound_name in result['text']:
+            print(result['text'])
+            for sound_name in CUSTOM_LIBRARY:
+                if sound_name in result['text'].split(' '):
                     sounds.append(sound_name)   
                     q.put(f"Sound {sound_name} successfully added!")
                     print(f"Sound {sound_name} successfully added!")
@@ -245,7 +261,7 @@ def assign_drum_sound() -> list[tuple[int, int]]:
 
         if not audio_thread.is_alive():
             for drum, sound_name in zip(drums_detected, sounds):
-                drum.set_drum_sound(sound_name, SOUND_LIBRARY[sound_name])
+                drum.set_drum_sound(sound_name, CUSTOM_LIBRARY[sound_name])
                 cv2.putText(frame, drum.sound_name, (drum.x, drum.y), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
 
 
@@ -265,7 +281,7 @@ def assign_drum_sound() -> list[tuple[int, int]]:
 def set_drum_sound(results, frame, drums, width, height, audio_thread, sounds, drums_detected):
 
     if audio_thread.is_alive():
-        cv2.putText(frame, 'SOUND LIBRARY: ' + ', '.join(SOUND_LIBRARY.keys()), (50, 100), cv2.FONT_HERSHEY_PLAIN, 4, (0, 255, 0), 5)
+        cv2.putText(frame, 'SOUND LIBRARY: ' + ', '.join(CUSTOM_LIBRARY.keys()), (50, 100), cv2.FONT_HERSHEY_PLAIN, 4, (0, 255, 0), 5)
         if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
             # Then, process each detected hand
             for hand_landmarks in results.multi_hand_landmarks:
@@ -275,11 +291,15 @@ def set_drum_sound(results, frame, drums, width, height, audio_thread, sounds, d
                     if drum.hit_in_drum(x * width, y * height): 
                         if drum not in drums_detected:
                             drums_detected.append(drum)
-        
+        # if drums_detected and sounds:
+        #     for drum, sound_name in zip(drums_detected, sounds):
+        #         # drum.set_drum_sound(sound_name, CUSTOM_LIBRARY[sound_name])
+        #         cv2.putText(frame, sound_name, (drum.x, drum.y), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
+            
 
     else:
         for drum, sound_name in zip(drums_detected, sounds):
-            drum.set_drum_sound(sound_name, SOUND_LIBRARY[sound_name])
+            drum.set_drum_sound(sound_name, CUSTOM_LIBRARY[sound_name])
             cv2.putText(frame, drum.sound_name, (drum.x, drum.y), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
 
 def live() -> list[tuple[int, int]]:
@@ -300,7 +320,7 @@ def live() -> list[tuple[int, int]]:
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID'
-    out = cv2.VideoWriter(f'Output/test.mp4', fourcc, fps, (width, height))
+    out = cv2.VideoWriter(f'Output/oldmacdonald{random.randint(0, 100)}.mp4', fourcc, fps, (width, height))
 
     last_hit_frame_idx = 0
 
