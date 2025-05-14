@@ -32,7 +32,7 @@ Ensure your machine has:
 
 ### Steps
 
-1. Install necessary packages using pip install -r requirements.txt. If you want to use a virtual environment, run `source venv/bin/activate` to use our environment which has all the packages required.
+1. Install necessary packages using pip install -r requirements.txt.
 2. Position the webcam using a tripod so that it clearly captures the paper circles laid out as drumheads.
 3. Run `python3 test.py` to start the system. This will
     - Start your webcam
